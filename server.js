@@ -225,6 +225,10 @@ app.all('/v1/*', async (req, res) => {
 
 // Initiate OAuth Login (发起 OAuth 登录)
 app.get('/api/auth/login', (req, res) => {
+  if (OPENAI_CLIENT_ID === 'your-openai-client-id') {
+    return res.redirect('/?error=' + encodeURIComponent('OAuth Client ID not configured. Please use manual token login or set OPENAI_CLIENT_ID env var. / OAuth 未配置，请使用手动输入 API Key 登录或设置环境变量 OPENAI_CLIENT_ID。'));
+  }
+
   const state = crypto.randomBytes(16).toString('hex');
   const authUrl = `https://auth.openai.com/authorize?` + querystring.stringify({
     client_id: OPENAI_CLIENT_ID,
@@ -304,6 +308,58 @@ app.get('/api/auth/callback', async (req, res) => {
   } catch (err) {
     console.error('OAuth error:', err);
     res.redirect('/?error=oauth_failed');
+  }
+});
+
+// Manual Token Login (手动输入 API Key 登录)
+app.post('/api/auth/manual', async (req, res) => {
+  const { apiKey } = req.body;
+  if (!apiKey || !apiKey.startsWith('sk-')) {
+    return res.status(400).json({ error: 'Invalid API Key format (must start with sk-).' });
+  }
+
+  try {
+    // 验证 API Key
+    const userResponse = await fetch('https://api.openai.com/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+
+    if (!userResponse.ok) {
+      const errData = await userResponse.json();
+      return res.status(401).json({ error: errData.error?.message || 'Invalid API Key.' });
+    }
+
+    // 这里通常可以使用 /v1/me 获取邮箱，但如果账号没有组织，可能会失败。
+    // 我们用一个缩写的 Token 后缀作为显示名。
+    const tokenSuffix = apiKey.slice(-6);
+    const emailStr = `token_${tokenSuffix}@manual.com`;
+
+    // Add account to the pool
+    const newAccount = {
+      id: Date.now().toString(),
+      email: emailStr,
+      name: `Manual Token ${tokenSuffix}`,
+      plan: 'plus', // 默认显示 plus
+      token: encrypt(apiKey),
+      quota: { used: 0, limit: 120, resetAt: new Date(Date.now() + 60*60*1000).toISOString() },
+      status: 'active'
+    };
+
+    accounts.push(newAccount);
+
+    // Generate User API Key if the user doesn't have one
+    const generatedApiKey = generateApiKey();
+    userApiKeys.set(generatedApiKey, {
+      userId: newAccount.id,
+      email: newAccount.email,
+      createdAt: new Date().toISOString(),
+      requestCount: 0
+    });
+
+    res.json({ success: true, apiKey: generatedApiKey });
+  } catch (err) {
+    console.error('Manual login error:', err);
+    res.status(500).json({ error: 'Failed to validate API Key due to network error.' });
   }
 });
 

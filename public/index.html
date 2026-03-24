@@ -83,8 +83,8 @@
                 <button onclick="toggleLanguage()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border border-gray-700 flex items-center gap-2" title="Toggle Language">
                     <i class="fas fa-globe"></i> <span id="langLabel">中/En</span>
                 </button>
-                <button onclick="window.location.href='/api/auth/login'" class="bg-primary hover:bg-secondary text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary/30 flex items-center gap-2">
-                    <i class="fab fa-openid"></i> <span data-i18n="loginBtn">Login with OpenAI</span>
+                <button onclick="openAddModal()" class="bg-primary hover:bg-secondary text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary/30 flex items-center gap-2">
+                    <i class="fas fa-plus-circle"></i> <span data-i18n="addAccountBtn">Add Account</span>
                 </button>
             </div>
         </header>
@@ -168,8 +168,43 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
         </div>
     </div>
 
+
+    <!-- Add Account Modal -->
+    <div id="addModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 opacity-0 transition-opacity duration-300">
+        <div class="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md transform scale-95 transition-transform duration-300" id="addModalContent">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-semibold text-white" data-i18n="addAccountTitle">Add New Account</h2>
+                <button onclick="closeAddModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="space-y-4">
+                <button onclick="window.location.href='/api/auth/login'" class="w-full bg-[#10a37f] hover:bg-[#0d8c6d] text-white py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#10a37f]/20">
+                    <i class="fab fa-openid text-lg"></i> <span data-i18n="loginWithOAuth">OAuth Login (Requires setup)</span>
+                </button>
+
+                <div class="relative flex py-2 items-center">
+                    <div class="flex-grow border-t border-gray-700"></div>
+                    <span class="flex-shrink-0 mx-4 text-gray-500 text-sm" data-i18n="orManualEntry">OR MANUAL ENTRY</span>
+                    <div class="flex-grow border-t border-gray-700"></div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1" data-i18n="apiKeyLabel">OpenAI API Key</label>
+                    <input type="password" id="manualApiKey" placeholder="sk-..." class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors">
+                    <p class="text-xs text-gray-500 mt-2" data-i18n="apiKeyHelp">Tokens will be verified against OpenAI's API before being added to the pool.</p>
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="submitManualKey()" id="submitKeyBtn" class="w-full bg-primary hover:bg-secondary text-white py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                        <span id="submitKeyText" data-i18n="addKeyBtn">Add Token</span> <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
-    <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-xl border-l-4 border-green-500 transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
+    <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-xl border-l-4 border-green-500 transform translate-y-20 opacity-0 transition-all duration-300 z-[100] flex items-center gap-3">
         <i class="fas fa-check-circle text-green-500"></i>
         <span id="toastMsg">Notification message</span>
     </div>
@@ -181,6 +216,12 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                 appTitle: "Codex Load Balancer",
                 gatewayActive: "API Gateway Active at",
                 loginBtn: "Login with OpenAI",
+                addAccountTitle: "Add New Account",
+                loginWithOAuth: "OAuth Login (Requires setup)",
+                orManualEntry: "OR MANUAL ENTRY",
+                apiKeyLabel: "OpenAI API Key",
+                apiKeyHelp: "Tokens will be verified against OpenAI API before being added to the pool.",
+                addKeyBtn: "Add Token",
                 accountPool: "Account Pool",
                 loadingAccounts: "Loading accounts...",
                 noAccounts: "No Accounts Connected",
@@ -215,6 +256,12 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                 appTitle: "Codex 负载均衡器",
                 gatewayActive: "API 代理运行于",
                 loginBtn: "使用 OpenAI 登录",
+                addAccountTitle: "添加新账号",
+                loginWithOAuth: "OAuth 授权登录 (需提前配置)",
+                orManualEntry: "或手动输入",
+                apiKeyLabel: "OpenAI API Key",
+                apiKeyHelp: "Token 在添加前会自动向 OpenAI 官方服务器验证有效性。",
+                addKeyBtn: "验证并添加",
                 accountPool: "API 账号池",
                 loadingAccounts: "正在加载账号...",
                 noAccounts: "暂无连接的账号",
@@ -288,6 +335,73 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
             }, 3000);
         }
 
+
+        function openAddModal() {
+            const modal = document.getElementById('addModal');
+            const content = document.getElementById('addModalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+            }, 10);
+            document.getElementById('manualApiKey').focus();
+        }
+
+        function closeAddModal() {
+            const modal = document.getElementById('addModal');
+            const content = document.getElementById('addModalContent');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.remove('flex');
+                modal.classList.add('hidden');
+                document.getElementById('manualApiKey').value = '';
+            }, 300);
+        }
+
+        async function submitManualKey() {
+            const input = document.getElementById('manualApiKey');
+            const btn = document.getElementById('submitKeyBtn');
+            const text = document.getElementById('submitKeyText');
+            const key = input.value.trim();
+
+            if (!key || !key.startsWith('sk-')) {
+                showToast(currentLang === 'en' ? 'Please enter a valid sk-... token.' : '请输入有效的 sk-... 格式的 Token。', 'error');
+                return;
+            }
+
+            const originalText = text.innerText;
+            text.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/auth/manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey: key })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    showToast(currentLang === 'en' ? 'API Key verified and added successfully!' : 'API Key 验证通过并已成功添加！', 'success');
+                    if (data.apiKey) {
+                        document.getElementById('dummyKeyDisplay').innerText = data.apiKey;
+                    }
+                    closeAddModal();
+                    loadAccounts();
+                } else {
+                    showToast(data.error || 'Verification failed.', 'error');
+                }
+            } catch (err) {
+                showToast('Network error during verification.', 'error');
+            } finally {
+                text.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
         function copyConfig() {
             const code = `[openai]\napi_base = "http://127.0.0.1:1337/v1"\napi_key = "${document.getElementById('dummyKeyDisplay').innerText}"`;
             navigator.clipboard.writeText(code).then(() => {
@@ -333,7 +447,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                         <i class="fas fa-user-slash text-4xl text-gray-600 mb-4"></i>
                         <h3 class="text-lg font-medium text-gray-300 mb-1">${t('noAccounts')}</h3>
                         <p class="text-gray-500 text-sm mb-4">${t('noAccountsDesc')}</p>
-                        <button onclick="window.location.href='/api/auth/login'" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors border border-gray-700">${t('addAccountBtn')}</button>
+                        <button onclick="openAddModal()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors border border-gray-700">${t('addAccountBtn')}</button>
                     </div>`;
                 return;
             }
