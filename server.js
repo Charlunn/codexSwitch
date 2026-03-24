@@ -18,10 +18,14 @@ const OPENAI_CLIENT_ID = process.env.OPENAI_CLIENT_ID || 'your-openai-client-id'
 const OPENAI_CLIENT_SECRET = process.env.OPENAI_CLIENT_SECRET || 'your-openai-client-secret';
 const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:1337/api/auth/callback';
 
+// Buffer the raw body for API proxying to allow retries
+app.use('/v1', express.raw({ type: '*/*', limit: '10mb' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const userApiKeys = new Map();
+const userApiKeys = new Map([
+  ['cx_dummy_test_key_123', { userId: '1', email: 'test@email.com', requestCount: 0 }]
+]);
 
 const accounts = [
   {
@@ -39,6 +43,28 @@ const proxyStats = {
   successfulRequests: 0,
   failedRequests: 0
 };
+
+// ============ SSE Logs Emitter ============
+const logClients = new Set();
+
+function emitLog(message, level = 'info') {
+  const logEntry = JSON.stringify({ message, level, timestamp: Date.now() });
+  for (const client of logClients) {
+    client.write(`data: ${logEntry}\n\n`);
+  }
+}
+
+app.get('/api/logs/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  logClients.add(res);
+
+  req.on('close', () => {
+    logClients.delete(res);
+  });
+});
 
 function encrypt(text) {
   const iv = crypto.randomBytes(IV_LENGTH);
@@ -73,6 +99,127 @@ function selectAvailableAccounts() {
   );
   return available;
 }
+
+// ============ 反向代理 (Codex 负载均衡网关) ============
+
+app.all('/v1/*', async (req, res) => {
+  // 1. Authenticate local Codex client
+  const authHeader = req.headers['authorization'];
+  let apiKey = null;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    apiKey = authHeader.substring(7);
+  } else {
+    apiKey = req.headers['x-api-key'];
+  }
+
+  // Allow passing requests even without strict dummy key verification
+  // if you want local open access, but here we keep the check:
+  if (!apiKey || !userApiKeys.has(apiKey)) {
+    emitLog(`Unauthorized request to ${req.originalUrl} (Invalid Key)`, 'error');
+    return res.status(401).json({
+      error: { message: 'Invalid or missing API key. Please configure dummy key in config.toml.', type: 'invalid_request_error' }
+    });
+  }
+
+  userApiKeys.get(apiKey).requestCount++;
+  proxyStats.totalRequests++;
+  emitLog(`Incoming request: ${req.method} ${req.originalUrl}`, 'info');
+
+  const availableAccounts = selectAvailableAccounts();
+
+  if (availableAccounts.length === 0) {
+    proxyStats.failedRequests++;
+    emitLog('No available accounts in the pool! All accounts exhausted or errored.', 'error');
+    return res.status(503).json({
+      error: { message: 'No available accounts to process the request.', type: 'server_error' }
+    });
+  }
+
+  let lastError = null;
+  const targetPath = req.originalUrl;
+
+  for (const account of availableAccounts) {
+    const token = decrypt(account.token);
+    if (!token) {
+      account.status = 'error';
+      lastError = { message: `Could not decrypt token for account ${account.email}.`, type: 'server_error' };
+      continue;
+    }
+
+    try {
+      await new Promise((resolve, reject) => {
+        // Strip out host and local authorization from headers
+        const headers = { ...req.headers };
+        delete headers['host'];
+        delete headers['content-length']; // will be recalculated by request
+
+        headers['Authorization'] = `Bearer ${token}`;
+
+        const options = {
+          hostname: 'api.openai.com',
+          port: 443,
+          path: targetPath,
+          method: req.method,
+          headers: headers
+        };
+
+        const proxyReq = https.request(options, (proxyRes) => {
+          // If 401, 429 or 5xx, we consider it a failure for this account and retry
+          if (proxyRes.statusCode === 401 || proxyRes.statusCode === 429 || proxyRes.statusCode >= 500) {
+            account.status = proxyRes.statusCode === 401 ? 'error' : (proxyRes.statusCode === 429 ? 'exhausted' : account.status);
+            lastError = { message: `OpenAI API returned status ${proxyRes.statusCode}.`, type: 'upstream_error' };
+            proxyRes.resume(); // consume response to free memory
+            emitLog(`Account ${account.email} failed with status ${proxyRes.statusCode}. Retrying...`, 'warning');
+            reject(new Error(`Upstream error ${proxyRes.statusCode}`));
+          } else {
+            // Success (200, 400, 404, etc. - client errors are returned to client)
+            account.quota.used++;
+            proxyStats.successfulRequests++;
+            emitLog(`Request fulfilled using account ${account.email} (Status: ${proxyRes.statusCode})`, 'success');
+            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            proxyRes.pipe(res).on('finish', resolve);
+          }
+        });
+
+        proxyReq.on('error', (err) => {
+          account.status = 'error';
+          lastError = { message: 'Proxy request failed.', type: 'proxy_error', details: err.message };
+          reject(err);
+        });
+
+        // Write the buffered body if it exists
+        if (req.body && req.body.length > 0) {
+          proxyReq.write(req.body);
+        }
+        proxyReq.end();
+      });
+
+      // If we reach here, the promise resolved, meaning the request was successfully piped back.
+      return;
+
+    } catch (error) {
+      console.error(`[Proxy] Account ${account.email} failed with error: ${error.message}. Switching to next account...`);
+      // Warning is already emitted inside the promise reject, but catch network errors here
+      if(error.message !== `Upstream error 401` && error.message !== `Upstream error 429` && !error.message.startsWith(`Upstream error 5`)) {
+          emitLog(`Network error for account ${account.email}: ${error.message}. Retrying...`, 'warning');
+      }
+    }
+  }
+
+  // All accounts failed
+  proxyStats.failedRequests++;
+  emitLog('All accounts failed to process the request.', 'error');
+  if (!res.headersSent) {
+    res.status(503).json({
+      error: {
+        message: 'All available OpenAI accounts failed to process the request.',
+        type: 'server_error',
+        last_error: lastError
+      }
+    });
+  }
+});
 
 // ============ OAuth 路由 ============
 
@@ -203,162 +350,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', proxy: 'running', accounts: accounts.length });
 });
 
-// ============ 代理服务器 ============
-
-function createProxyServer() {
-  const server = http.createServer();
-
-  server.on('connect', (req, clientSocket, head) => {
-    const [hostname, port] = req.url.split(':');
-    const targetPort = parseInt(port) || 443;
-
-    if (hostname === 'api.openai.com' || hostname.endsWith('.openai.com') || hostname === 'auth.openai.com') {
-      const apiKey = req.headers['x-api-key'];
-
-      if (!apiKey || !userApiKeys.has(apiKey)) {
-        clientSocket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-        clientSocket.end();
-        return;
-      }
-
-      const serverSocket = net.connect(targetPort, hostname, () => {
-        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-        serverSocket.write(head);
-        serverSocket.pipe(clientSocket);
-        clientSocket.pipe(serverSocket);
-      });
-
-      serverSocket.on('error', () => {
-        proxyStats.failedRequests++;
-        clientSocket.end();
-      });
-
-    } else {
-      const serverSocket = net.connect(targetPort, hostname, () => {
-        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-        serverSocket.write(head);
-        serverSocket.pipe(clientSocket);
-        clientSocket.pipe(serverSocket);
-      });
-
-      serverSocket.on('error', () => clientSocket.end());
-    }
-  });
-
-  server.on('request', (req, res) => {
-    const parsedUrl = url.parse(req.url);
-
-    if (parsedUrl.hostname === 'api.openai.com') {
-      handleOpenAIRequest(req, res, parsedUrl);
-    } else {
-      const proxyReq = http.request({ hostname: parsedUrl.hostname, port: parsedUrl.port, path: parsedUrl.path, method: req.method, headers: req.headers }, (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res);
-      });
-      req.pipe(proxyReq);
-    }
-  });
-
-  return server;
-}
-
-async function handleOpenAIRequest(req, res, parsedUrl) {
-  const apiKey = req.headers['authorization']?.replace('Bearer ', '') || req.headers['x-api-key'];
-
-  if (!apiKey || !userApiKeys.has(apiKey)) {
-    return res.status(401).json({
-      error: { message: 'Invalid API key provided.', type: 'invalid_request_error' }
-    });
-  }
-
-  userApiKeys.get(apiKey).requestCount++;
-  proxyStats.totalRequests++;
-
-  const availableAccounts = selectAvailableAccounts();
-
-  if (availableAccounts.length === 0) {
-    proxyStats.failedRequests++;
-    return res.status(503).json({
-      error: { message: 'No available accounts to process the request.', type: 'server_error' }
-    });
-  }
-
-  let lastError = null;
-
-  for (const account of availableAccounts) {
-    const token = decrypt(account.token);
-    if (!token) {
-      account.status = 'error'; // Mark account as bad if token is undecryptable
-      lastError = { message: `Could not decrypt token for account ${account.email}.`, type: 'server_error' };
-      continue; // Try next account
-    }
-
-    try {
-      await new Promise((resolve, reject) => {
-        const options = {
-          hostname: 'api.openai.com',
-          port: 443,
-          path: parsedUrl.path,
-          method: req.method,
-          headers: {
-            ...req.headers,
-            'Authorization': `Bearer ${token}`,
-            'host': 'api.openai.com' // Explicitly set host header
-          }
-        };
-
-        const proxyReq = https.request(options, (proxyRes) => {
-          // We consider status codes < 500 as "successful" from the proxy's perspective.
-          // The client should handle 4xx errors. We only retry on 5xx or network errors.
-          if (proxyRes.statusCode < 500) {
-            account.quota.used++;
-            proxyStats.successfulRequests++;
-            res.writeHead(proxyRes.statusCode, proxyRes.headers);
-            proxyRes.pipe(res).on('finish', resolve);
-          } else {
-             // OpenAI server error (500, 502, 503, etc.), let's try another account.
-            account.status = 'error';
-            lastError = { message: `OpenAI API returned status ${proxyRes.statusCode}.`, type: 'upstream_error' };
-            proxyRes.resume(); // Consume response data to free up memory.
-            reject(new Error('Upstream server error'));
-          }
-        });
-
-        proxyReq.on('error', (err) => {
-          // This handles network errors (e.g., DNS resolution, TCP connection timeout).
-          account.status = 'error';
-          lastError = { message: 'Proxy request failed.', type: 'proxy_error', details: err.message };
-          reject(err);
-        });
-
-        req.pipe(proxyReq);
-      });
-
-      return; // If we get here, the request was successful and piped. Exit the loop.
-
-    } catch (error) {
-       // This block is entered if the promise is rejected (network error or 5xx from OpenAI).
-       // Log the error and try the next account in the loop.
-      console.error(`Account ${account.email} failed. Trying next one. Error: ${error.message}`);
-    }
-  }
-
-  // If the loop finishes without returning, it means all accounts have failed.
-  proxyStats.failedRequests++;
-  res.status(503).json({
-    error: {
-      message: 'All available accounts failed to process the request.',
-      type: 'server_error',
-      last_error: lastError
-    }
-  });
-}
-
-const proxyServer = createProxyServer();
-proxyServer.listen(HTTP_PROXY_PORT, () => {
-  console.log(`🔌 Proxy listening on port ${HTTP_PROXY_PORT}`);
-});
-
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════╗
@@ -366,7 +357,7 @@ app.listen(PORT, () => {
 ╚══════════════════════════════════════════════════════╝
 
 🌐 WebUI:     http://localhost:${PORT}
-🔌 Proxy:    http://localhost:${HTTP_PROXY_PORT}
+🔌 API Base:  http://localhost:${PORT}/v1
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   HOW TO USE:
@@ -374,8 +365,13 @@ app.listen(PORT, () => {
 
 1. Open http://localhost:${PORT}
 2. Click "Login with OpenAI" to OAuth login
-3. Set system proxy to 127.0.0.1:${HTTP_PROXY_PORT}
-4. Codex requests will be load-balanced!
+3. Configure Codex config.toml (~/.codex/config.toml or .codex/config.toml):
+
+   [openai]
+   api_base = "http://127.0.0.1:${PORT}/v1"
+   api_key = "your_generated_dummy_key"
+
+4. Codex requests will be load-balanced automatically!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
