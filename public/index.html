@@ -151,6 +151,40 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                             <div class="text-2xl font-bold text-blue-400" id="statRate">100%</div>
                         </div>
                     </div>
+
+                    <div class="mt-6 space-y-3">
+                        <div class="text-gray-400 text-xs uppercase tracking-wider mb-2" data-i18n="statAggregated">Aggregated Quota</div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs text-gray-500">
+                                <span data-i18n="fiveHourQuota">5-Hour</span>
+                                <span id="aggFiveHour">0/0</span>
+                            </div>
+                            <div class="w-full bg-gray-900 rounded-full h-1.5 overflow-hidden border border-gray-800">
+                                <div id="aggFiveHourBar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs text-gray-500">
+                                <span data-i18n="weeklyQuota">Weekly</span>
+                                <span id="aggWeekly">0/0</span>
+                            </div>
+                            <div class="w-full bg-gray-900 rounded-full h-1.5 overflow-hidden border border-gray-800">
+                                <div id="aggWeeklyBar" class="bg-indigo-500 h-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs text-gray-500">
+                                <span data-i18n="totalQuota">Total</span>
+                                <span id="aggTotal">0/0</span>
+                            </div>
+                            <div class="w-full bg-gray-900 rounded-full h-1.5 overflow-hidden border border-gray-800">
+                                <div id="aggTotalBar" class="bg-purple-500 h-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Console Logs -->
@@ -193,11 +227,15 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                 statSuccess: "Successful",
                 statFailed: "Failed / Retried",
                 statRate: "Success Rate",
+                statAggregated: "Aggregated Quota",
                 consoleTitle: "Gateway Console",
                 clearLogsBtn: "Clear",
                 initConsole: "Initializing console...",
                 configCopied: "Configuration copied to clipboard!",
                 apiQuotaUsage: "API Quota Usage",
+                totalQuota: "Total",
+                weeklyQuota: "Weekly",
+                fiveHourQuota: "5-Hour",
                 reqs: "reqs",
                 healthy: "Healthy",
                 rateLimited: "Rate Limited",
@@ -227,11 +265,15 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                 statSuccess: "请求成功",
                 statFailed: "失败 / 触发重试",
                 statRate: "请求成功率",
+                statAggregated: "总额度余量统计",
                 consoleTitle: "代理控制台 (实时日志)",
                 clearLogsBtn: "清空",
                 initConsole: "控制台初始化中...",
                 configCopied: "配置已复制到剪贴板！",
                 apiQuotaUsage: "API 额度使用情况",
+                totalQuota: "总配额",
+                weeklyQuota: "周配额",
+                fiveHourQuota: "5小时配额",
                 reqs: "次",
                 healthy: "健康",
                 rateLimited: "被限流",
@@ -319,6 +361,18 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                     const rate = Math.round((stats.successfulRequests / stats.totalRequests) * 100);
                     document.getElementById('statRate').textContent = `${rate}%`;
                 }
+
+                if (stats.aggregated) {
+                    const agg = stats.aggregated;
+                    document.getElementById('aggTotal').textContent = `${agg.totalUsed} / ${agg.totalLimit}`;
+                    document.getElementById('aggTotalBar').style.width = `${Math.min(100, (agg.totalUsed/agg.totalLimit)*100)}%`;
+
+                    document.getElementById('aggWeekly').textContent = `${agg.weeklyUsed} / ${agg.weeklyLimit}`;
+                    document.getElementById('aggWeeklyBar').style.width = `${Math.min(100, (agg.weeklyUsed/agg.weeklyLimit)*100)}%`;
+
+                    document.getElementById('aggFiveHour').textContent = `${agg.fiveHourUsed} / ${agg.fiveHourLimit}`;
+                    document.getElementById('aggFiveHourBar').style.width = `${Math.min(100, (agg.fiveHourUsed/agg.fiveHourLimit)*100)}%`;
+                }
             } catch (err) {}
         }
 
@@ -339,9 +393,13 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
             }
 
             list.innerHTML = accounts.map((a) => {
-                const usagePercent = Math.min(100, (a.quota.used / a.quota.limit) * 100);
                 const statusColor = a.status === 'active' ? 'bg-green-500' : (a.status === 'exhausted' ? 'bg-yellow-500' : 'bg-red-500');
                 const statusText = a.status === 'active' ? t('healthy') : (a.status === 'exhausted' ? t('rateLimited') : t('error'));
+
+                const q = a.quota;
+                const fiveHourPct = Math.min(100, (q.fiveHour.used / q.fiveHour.limit) * 100);
+                const weeklyPct = Math.min(100, (q.weekly.used / q.weekly.limit) * 100);
+                const totalPct = Math.min(100, (q.total.used / q.total.limit) * 100);
 
                 return `
                 <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-5 hover:border-gray-600 transition-colors">
@@ -357,7 +415,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                                         <span class="w-1.5 h-1.5 rounded-full ${statusColor}"></span>
                                         ${statusText}
                                     </span>
-                                    <span class="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800 uppercase">${a.plan}</span>
+                                    <span class="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800 uppercase font-bold text-blue-400">${a.level || 'Plus'}</span>
                                 </div>
                             </div>
                         </div>
@@ -366,13 +424,37 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                         </button>
                     </div>
 
-                    <div>
-                        <div class="flex justify-between text-xs text-gray-400 mb-1.5">
-                            <span>${t('apiQuotaUsage')}</span>
-                            <span>${a.quota.used} / ${a.quota.limit} ${t('reqs')}</span>
+                    <div class="space-y-3">
+                        <div class="text-xs font-semibold text-gray-500 uppercase tracking-tight">${t('apiQuotaUsage')}</div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-gray-400 uppercase">
+                                <span>${t('fiveHourQuota')}</span>
+                                <span>${q.fiveHour.used} / ${q.fiveHour.limit}</span>
+                            </div>
+                            <div class="w-full bg-gray-900 rounded-full h-1.5 border border-gray-800 overflow-hidden">
+                                <div class="bg-blue-500 h-full rounded-full" style="width: ${fiveHourPct}%"></div>
+                            </div>
                         </div>
-                        <div class="w-full bg-gray-900 rounded-full h-2 border border-gray-800 overflow-hidden">
-                            <div class="bg-gradient-to-r from-primary to-secondary h-2 rounded-full quota-bar" style="width: ${usagePercent}%"></div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-gray-400 uppercase">
+                                <span>${t('weeklyQuota')}</span>
+                                <span>${q.weekly.used} / ${q.weekly.limit}</span>
+                            </div>
+                            <div class="w-full bg-gray-900 rounded-full h-1.5 border border-gray-800 overflow-hidden">
+                                <div class="bg-indigo-500 h-full rounded-full" style="width: ${weeklyPct}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-gray-400 uppercase">
+                                <span>${t('totalQuota')}</span>
+                                <span>${q.total.used} / ${q.total.limit}</span>
+                            </div>
+                            <div class="w-full bg-gray-900 rounded-full h-1.5 border border-gray-800 overflow-hidden">
+                                <div class="bg-purple-500 h-full rounded-full" style="width: ${totalPct}%"></div>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -34,9 +34,13 @@ const accounts = [
   {
     id: '1',
     email: 'user1@email.com',
-    plan: 'plus',
+    level: 'Plus',
     token: encrypt('sk-openai-token-xxx'),
-    quota: { used: 0, limit: 120, resetAt: new Date(Date.now() + 60*60*1000).toISOString() },
+    quota: {
+        total: { used: 0, limit: 1000 },
+        weekly: { used: 0, limit: 200 },
+        fiveHour: { used: 0, limit: 40, resetAt: new Date(Date.now() + 5*60*60*1000).toISOString() }
+    },
     status: 'active'
   }
 ];
@@ -158,11 +162,14 @@ function updateCodexConfig(apiKey) {
 
 function selectAvailableAccounts() {
   const available = accounts.filter(a =>
-    a.status !== 'exhausted' && a.status !== 'error' && a.quota.used < a.quota.limit
+    a.status !== 'exhausted' && a.status !== 'error' &&
+    a.quota.fiveHour.used < a.quota.fiveHour.limit &&
+    a.quota.weekly.used < a.quota.weekly.limit &&
+    a.quota.total.used < a.quota.total.limit
   );
-  // Dynamic weight routing: Sort by remaining quota (优先选择额度最充足的账号)
+  // Sort by remaining 5h quota (以 5 小时内余量作为主排序条件)
   available.sort((a, b) =>
-    (b.quota.limit - b.quota.used) - (a.quota.limit - a.quota.used)
+    (b.quota.fiveHour.limit - b.quota.fiveHour.used) - (a.quota.fiveHour.limit - a.quota.fiveHour.used)
   );
   return available;
 }
@@ -256,7 +263,9 @@ app.all('/v1/*', async (req, res) => {
              reject(new Error(`Upstream ${proxyRes.statusCode}`));
           } else {
             // Success (200, or client errors like 400, 404 which should be passed back)
-            account.quota.used++;
+            account.quota.fiveHour.used++;
+            account.quota.weekly.used++;
+            account.quota.total.used++;
             proxyStats.successfulRequests++;
             emitLog(`Request fulfilled by ${account.email} (Status: ${proxyRes.statusCode})`, 'success');
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
@@ -347,9 +356,13 @@ app.get('/api/auth/login', async (req, res) => {
               id: existingIdx !== -1 ? accounts[existingIdx].id : Date.now().toString(),
               email: email,
               name: session.user?.name || '',
-              plan: 'plus',
+              level: 'Plus', // Default for now
               token: encrypt(session.accessToken),
-              quota: existingIdx !== -1 ? accounts[existingIdx].quota : { used: 0, limit: 120, resetAt: new Date(Date.now() + 60*60*1000).toISOString() },
+              quota: existingIdx !== -1 ? accounts[existingIdx].quota : {
+                  total: { used: 0, limit: 1000 },
+                  weekly: { used: 0, limit: 200 },
+                  fiveHour: { used: 0, limit: 40, resetAt: new Date(Date.now() + 5*60*60*1000).toISOString() }
+              },
               status: 'active'
             };
 
@@ -402,7 +415,7 @@ app.get('/api/accounts', (req, res) => {
     id: a.id,
     email: a.email,
     name: a.name,
-    plan: a.plan,
+    level: a.level,
     quota: a.quota,
     status: a.status
   })));
@@ -423,12 +436,23 @@ app.delete('/api/accounts/:id', (req, res) => {
 
 // Get proxy stats (获取代理统计信息)
 app.get('/api/proxy/stats', (req, res) => {
+  const aggregated = accounts.reduce((acc, a) => {
+    acc.totalUsed += a.quota.total.used;
+    acc.totalLimit += a.quota.total.limit;
+    acc.weeklyUsed += a.quota.weekly.used;
+    acc.weeklyLimit += a.quota.weekly.limit;
+    acc.fiveHourUsed += a.quota.fiveHour.used;
+    acc.fiveHourLimit += a.quota.fiveHour.limit;
+    return acc;
+  }, { totalUsed: 0, totalLimit: 0, weeklyUsed: 0, weeklyLimit: 0, fiveHourUsed: 0, fiveHourLimit: 0 });
+
   res.json({
     ...proxyStats,
+    aggregated,
     accounts: accounts.map(a => ({
       email: a.email,
-      quotaUsed: a.quota.used,
-      quotaLimit: a.quota.limit,
+      level: a.level,
+      quota: a.quota,
       status: a.status
     }))
   });
