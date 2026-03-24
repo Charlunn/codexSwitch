@@ -329,7 +329,7 @@ app.get('/api/auth/login', async (req, res) => {
     const page = await browser.newPage();
 
     // Redirect user to OpenAI Login
-    await page.goto('https://chat.openai.com/auth/login');
+    await page.goto('https://chatgpt.com/auth/login');
 
     res.send(`
       <html>
@@ -339,16 +339,23 @@ app.get('/api/auth/login', async (req, res) => {
           <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px;">
             Waiting for session token... / 正在等待捕获 Token...
           </div>
+          <p style="font-size: 0.8rem; color: #64748b; margin-top: 20px;">
+            Tip: If the browser is stuck on a CAPTCHA, solve it manually. / 提示：如果浏览器卡在人机验证，请手动完成。
+          </p>
         </body>
       </html>
     `);
 
     page.on('response', async (response) => {
       const url = response.url();
-      if (url.includes('chat.openai.com/api/auth/session') && response.status() === 200) {
-        try {
-          const session = await response.json();
-          if (session.accessToken) {
+      // Listen for both domains as OpenAI is migrating
+      if (url.includes('/api/auth/session')) {
+        emitLog(`Detected session request: ${url} (Status: ${response.status()}) / 检测到 Session 请求: ${url} (状态: ${response.status()})`, 'info');
+
+        if (response.status() === 200) {
+          try {
+            const session = await response.json();
+            if (session.accessToken) {
             const email = session.user?.email || 'unknown';
             emitLog(`Captured Token for: ${email} / 已捕获账号 Token: ${email}`, 'success');
 
