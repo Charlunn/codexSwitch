@@ -71,17 +71,22 @@
                     cx
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Codex Load Balancer</h1>
+                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400" data-i18n="appTitle">Codex Load Balancer</h1>
                     <div class="flex items-center gap-2 text-sm text-gray-400 mt-1">
                         <span class="pulse-dot bg-green-400"></span>
-                        <span>API Gateway Active at <code class="bg-gray-800 px-2 py-0.5 rounded text-green-300">http://127.0.0.1:1337/v1</code></span>
+                        <span><span data-i18n="gatewayActive">API Gateway Active at</span> <code class="bg-gray-800 px-2 py-0.5 rounded text-green-300">http://127.0.0.1:1337/v1</code></span>
                     </div>
                 </div>
             </div>
 
-            <button onclick="window.location.href='/api/auth/login'" class="bg-primary hover:bg-secondary text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary/30 flex items-center gap-2">
-                <i class="fab fa-openid"></i> Login with OpenAI
-            </button>
+            <div class="flex items-center gap-3">
+                <button onclick="toggleLanguage()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border border-gray-700 flex items-center gap-2" title="Toggle Language">
+                    <i class="fas fa-globe"></i> <span id="langLabel">中/En</span>
+                </button>
+                <button onclick="window.location.href='/api/auth/login'" class="bg-primary hover:bg-secondary text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary/30 flex items-center gap-2">
+                    <i class="fab fa-openid"></i> <span data-i18n="loginBtn">Login with OpenAI</span>
+                </button>
+            </div>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -92,22 +97,22 @@
                 <!-- Accounts Card -->
                 <div class="glass-panel rounded-2xl p-6">
                     <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-xl font-semibold flex items-center gap-2"><i class="fas fa-users text-primary"></i> Account Pool</h2>
+                        <h2 class="text-xl font-semibold flex items-center gap-2"><i class="fas fa-users text-primary"></i> <span data-i18n="accountPool">Account Pool</span></h2>
                         <span class="text-sm bg-gray-800 text-gray-300 px-3 py-1 rounded-full" id="accountCountBadge">0 Total</span>
                     </div>
 
                     <div id="accountList" class="space-y-4">
                         <div class="text-center py-8 text-gray-500">
                             <i class="fas fa-circle-notch fa-spin text-3xl mb-3"></i>
-                            <p>Loading accounts...</p>
+                            <p data-i18n="loadingAccounts">Loading accounts...</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- Setup Guide -->
                 <div class="glass-panel rounded-2xl p-6">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fas fa-cog text-primary"></i> Codex Configuration</h2>
-                    <p class="text-gray-400 text-sm mb-4">Edit your <code class="text-gray-300">~/.codex/config.toml</code> or <code class="text-gray-300">.codex/config.toml</code> file to use this local gateway.</p>
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fas fa-cog text-primary"></i> <span data-i18n="configTitle">Codex Configuration</span></h2>
+                    <p class="text-gray-400 text-sm mb-4" data-i18n="configDesc">Edit your <code class="text-gray-300">~/.codex/config.toml</code> or <code class="text-gray-300">.codex/config.toml</code> file to use this local gateway.</p>
 
                     <div class="bg-gray-900 rounded-xl p-4 border border-gray-700 font-mono text-sm relative group">
                         <pre class="text-gray-300"><code>[openai]
@@ -126,23 +131,23 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
 
                 <!-- Monitor Stats -->
                 <div class="glass-panel rounded-2xl p-6">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-primary"></i> Traffic Monitor</h2>
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-primary"></i> <span data-i18n="trafficMonitor">Traffic Monitor</span></h2>
 
                     <div class="grid grid-cols-2 gap-4">
                         <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1">Total Requests</div>
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statTotal">Total Requests</div>
                             <div class="text-2xl font-bold text-white" id="statTotal">0</div>
                         </div>
                         <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1">Successful</div>
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statSuccess">Successful</div>
                             <div class="text-2xl font-bold text-green-400" id="statSuccess">0</div>
                         </div>
                         <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1">Failed / Retried</div>
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statFailed">Failed / Retried</div>
                             <div class="text-2xl font-bold text-red-400" id="statFailed">0</div>
                         </div>
                         <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1">Success Rate</div>
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statRate">Success Rate</div>
                             <div class="text-2xl font-bold text-blue-400" id="statRate">100%</div>
                         </div>
                     </div>
@@ -151,11 +156,11 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                 <!-- Console Logs -->
                 <div class="glass-panel rounded-2xl overflow-hidden flex flex-col h-[400px]">
                     <div class="bg-gray-800/80 p-3 border-b border-gray-700 flex justify-between items-center">
-                        <h2 class="text-sm font-semibold flex items-center gap-2"><i class="fas fa-terminal text-primary"></i> Gateway Console</h2>
-                        <button onclick="clearLogs()" class="text-xs text-gray-400 hover:text-white"><i class="fas fa-trash"></i> Clear</button>
+                        <h2 class="text-sm font-semibold flex items-center gap-2"><i class="fas fa-terminal text-primary"></i> <span data-i18n="consoleTitle">Gateway Console</span></h2>
+                        <button onclick="clearLogs()" class="text-xs text-gray-400 hover:text-white"><i class="fas fa-trash"></i> <span data-i18n="clearLogsBtn">Clear</span></button>
                     </div>
                     <div class="p-4 bg-black/40 flex-1 log-container" id="consoleLogs">
-                        <div class="log-line log-info"><span class="log-timestamp">[System]</span> Initializing console...</div>
+                        <div class="log-line log-info"><span class="log-timestamp">[System]</span> <span id="initLogMsg">Initializing console...</span></div>
                     </div>
                 </div>
 
@@ -170,7 +175,105 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
     </div>
 
     <script>
+        // --- Translations (i18n) ---
+        const translations = {
+            en: {
+                appTitle: "Codex Load Balancer",
+                gatewayActive: "API Gateway Active at",
+                loginBtn: "Login with OpenAI",
+                accountPool: "Account Pool",
+                loadingAccounts: "Loading accounts...",
+                noAccounts: "No Accounts Connected",
+                noAccountsDesc: "Login with OpenAI to add your first account to the pool.",
+                addAccountBtn: "Add Account",
+                configTitle: "Codex Configuration",
+                configDesc: "Edit your <code>~/.codex/config.toml</code> or <code>.codex/config.toml</code> file to use this local gateway.",
+                trafficMonitor: "Traffic Monitor",
+                statTotal: "Total Requests",
+                statSuccess: "Successful",
+                statFailed: "Failed / Retried",
+                statRate: "Success Rate",
+                consoleTitle: "Gateway Console",
+                clearLogsBtn: "Clear",
+                initConsole: "Initializing console...",
+                configCopied: "Configuration copied to clipboard!",
+                apiQuotaUsage: "API Quota Usage",
+                reqs: "reqs",
+                healthy: "Healthy",
+                rateLimited: "Rate Limited",
+                error: "Error",
+                confirmRemove: "Remove this account from the pool?",
+                accountRemoved: "Account removed",
+                failedRemove: "Failed to remove",
+                consoleCleared: "Console cleared.",
+                connectedSSE: "Connected to Gateway SSE stream",
+                loginFailed: "Login Failed:",
+                accountLinked: "OpenAI account linked successfully!",
+                activeLabel: "Active"
+            },
+            zh: {
+                appTitle: "Codex 负载均衡器",
+                gatewayActive: "API 代理运行于",
+                loginBtn: "使用 OpenAI 登录",
+                accountPool: "API 账号池",
+                loadingAccounts: "正在加载账号...",
+                noAccounts: "暂无连接的账号",
+                noAccountsDesc: "请使用 OpenAI 登录，以将您的第一个账号添加到账号池中。",
+                addAccountBtn: "添加账号",
+                configTitle: "Codex 客户端配置",
+                configDesc: "请修改 <code>~/.codex/config.toml</code> 或当前项目的 <code>.codex/config.toml</code> 来使用此本地代理。",
+                trafficMonitor: "流量监控",
+                statTotal: "总请求数",
+                statSuccess: "请求成功",
+                statFailed: "失败 / 触发重试",
+                statRate: "请求成功率",
+                consoleTitle: "代理控制台 (实时日志)",
+                clearLogsBtn: "清空",
+                initConsole: "控制台初始化中...",
+                configCopied: "配置已复制到剪贴板！",
+                apiQuotaUsage: "API 额度使用情况",
+                reqs: "次",
+                healthy: "健康",
+                rateLimited: "被限流",
+                error: "报错",
+                confirmRemove: "确定要从账号池中移除此账号吗？",
+                accountRemoved: "账号已移除",
+                failedRemove: "移除失败",
+                consoleCleared: "控制台已清空。",
+                connectedSSE: "已连接到网关实时日志流",
+                loginFailed: "登录失败：",
+                accountLinked: "OpenAI 账号授权成功！",
+                activeLabel: "个活跃"
+            }
+        };
+
+        let currentLang = localStorage.getItem('cx_lang') || 'en';
+
+        function t(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'zh' : 'en';
+            localStorage.setItem('cx_lang', currentLang);
+            updateUIStrings();
+            loadAccounts(); // Re-render dynamic account list
+        }
+
+        function updateUIStrings() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) {
+                    el.innerHTML = translations[currentLang][key];
+                }
+            });
+            document.getElementById('initLogMsg').textContent = t('initConsole');
+        }
+
         const API = '/api';
+
+        // Initialize i18n
+        updateUIStrings();
 
         // --- Notifications ---
         function showToast(message, type = 'success') {
@@ -188,7 +291,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
         function copyConfig() {
             const code = `[openai]\napi_base = "http://127.0.0.1:1337/v1"\napi_key = "${document.getElementById('dummyKeyDisplay').innerText}"`;
             navigator.clipboard.writeText(code).then(() => {
-                showToast('Configuration copied to clipboard!');
+                showToast(t('configCopied'));
             });
         }
 
@@ -222,15 +325,15 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
         // --- Rendering ---
         function renderAccounts(accounts) {
             const list = document.getElementById('accountList');
-            document.getElementById('accountCountBadge').textContent = `${accounts.length} Active`;
+            document.getElementById('accountCountBadge').textContent = `${accounts.length} ${t('activeLabel')}`;
 
             if (!accounts || accounts.length === 0) {
                 list.innerHTML = `
                     <div class="text-center py-12 border-2 border-dashed border-gray-700 rounded-xl">
                         <i class="fas fa-user-slash text-4xl text-gray-600 mb-4"></i>
-                        <h3 class="text-lg font-medium text-gray-300 mb-1">No Accounts Connected</h3>
-                        <p class="text-gray-500 text-sm mb-4">Login with OpenAI to add your first account to the pool.</p>
-                        <button onclick="window.location.href='/api/auth/login'" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors border border-gray-700">Add Account</button>
+                        <h3 class="text-lg font-medium text-gray-300 mb-1">${t('noAccounts')}</h3>
+                        <p class="text-gray-500 text-sm mb-4">${t('noAccountsDesc')}</p>
+                        <button onclick="window.location.href='/api/auth/login'" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors border border-gray-700">${t('addAccountBtn')}</button>
                     </div>`;
                 return;
             }
@@ -238,7 +341,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
             list.innerHTML = accounts.map((a) => {
                 const usagePercent = Math.min(100, (a.quota.used / a.quota.limit) * 100);
                 const statusColor = a.status === 'active' ? 'bg-green-500' : (a.status === 'exhausted' ? 'bg-yellow-500' : 'bg-red-500');
-                const statusText = a.status === 'active' ? 'Healthy' : (a.status === 'exhausted' ? 'Rate Limited' : 'Error');
+                const statusText = a.status === 'active' ? t('healthy') : (a.status === 'exhausted' ? t('rateLimited') : t('error'));
 
                 return `
                 <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-5 hover:border-gray-600 transition-colors">
@@ -258,15 +361,15 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                                 </div>
                             </div>
                         </div>
-                        <button onclick="deleteAccount('${a.id}')" class="text-gray-500 hover:text-red-400 transition-colors" title="Remove Account">
+                        <button onclick="deleteAccount('${a.id}')" class="text-gray-500 hover:text-red-400 transition-colors" title="Remove">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
 
                     <div>
                         <div class="flex justify-between text-xs text-gray-400 mb-1.5">
-                            <span>API Quota Usage</span>
-                            <span>${a.quota.used} / ${a.quota.limit} reqs</span>
+                            <span>${t('apiQuotaUsage')}</span>
+                            <span>${a.quota.used} / ${a.quota.limit} ${t('reqs')}</span>
                         </div>
                         <div class="w-full bg-gray-900 rounded-full h-2 border border-gray-800 overflow-hidden">
                             <div class="bg-gradient-to-r from-primary to-secondary h-2 rounded-full quota-bar" style="width: ${usagePercent}%"></div>
@@ -277,16 +380,16 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
         }
 
         async function deleteAccount(id) {
-            if (!confirm('Remove this account from the pool?')) return;
+            if (!confirm(t('confirmRemove'))) return;
             try {
                 const res = await fetch(`${API}/accounts/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    showToast('Account removed', 'success');
+                    showToast(t('accountRemoved'), 'success');
                     loadAccounts();
                     addLog(`Account removed manually`, 'warning');
                 }
             } catch (err) {
-                showToast('Failed to remove', 'error');
+                showToast(t('failedRemove'), 'error');
             }
         }
 
@@ -304,7 +407,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
 
         function clearLogs() {
             logContainer.innerHTML = '';
-            addLog('Console cleared.', 'info');
+            addLog(t('consoleCleared'), 'info');
         }
 
         // Connect to SSE for real-time logs
@@ -323,7 +426,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
                 } catch(err) {}
             };
 
-            eventSource.onopen = () => addLog('Connected to Gateway SSE stream', 'success');
+            eventSource.onopen = () => addLog(t('connectedSSE'), 'success');
             eventSource.onerror = () => {
                 eventSource.close();
                 setTimeout(connectSSE, 5000); // Reconnect logic
@@ -340,7 +443,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
         // Handle OAuth Callback
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('error')) {
-            showToast('Login Failed: ' + decodeURIComponent(urlParams.get('error')), 'error');
+            showToast(t('loginFailed') + ' ' + decodeURIComponent(urlParams.get('error')), 'error');
             history.replaceState({}, '', window.location.pathname);
         }
         if (urlParams.get('success')) {
@@ -348,7 +451,7 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
             if(apiKey) {
                 document.getElementById('dummyKeyDisplay').innerText = apiKey;
             }
-            showToast('OpenAI account linked successfully!', 'success');
+            showToast(t('accountLinked'), 'success');
             history.replaceState({}, '', window.location.pathname);
             addLog('New OpenAI account successfully authorized and added to pool', 'success');
             loadAccounts();
