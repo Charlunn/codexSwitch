@@ -417,6 +417,21 @@ api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_1
             eventSource.onmessage = (e) => {
                 try {
                     const data = JSON.parse(e.data);
+
+                    // Handle special system messages for automated login flow (处理自动化登录成功的特殊系统消息)
+                    if (data.level === 'system' && data.message.startsWith('SUCCESS_LOGIN:')) {
+                        const parts = data.message.split(':');
+                        const email = parts[1];
+                        const apiKey = parts[2];
+
+                        document.getElementById('dummyKeyDisplay').innerText = apiKey;
+                        showToast(t('accountLinked'), 'success');
+                        addLog(`Account ${email} linked successfully!`, 'success');
+                        loadAccounts();
+                        loadStats();
+                        return;
+                    }
+
                     addLog(data.message, data.level);
                     // Force refresh stats on important events
                     if (data.level !== 'info') {

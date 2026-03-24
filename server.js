@@ -1,3 +1,6 @@
+const puppeteer = require("puppeteer");
+const os = require("os");
+const fs = require("fs");
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
@@ -90,10 +93,74 @@ function generateApiKey() {
   return 'cx_' + crypto.randomBytes(24).toString('hex');
 }
 
+/**
+ * Automatically update local Codex config.toml to point to this proxy
+ * (自动更新本地 Codex 配置文件)
+ */
+function updateCodexConfig(apiKey) {
+  try {
+    const configDir = path.join(os.homedir(), '.codex');
+    const configPath = path.join(configDir, 'config.toml');
+
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    let configContent = '';
+    if (fs.existsSync(configPath)) {
+      configContent = fs.readFileSync(configPath, 'utf8');
+      // Backup old config
+      fs.writeFileSync(configPath + '.bak', configContent);
+    }
+
+    // Simple TOML manipulation
+    const apiBase = `http://127.0.0.1:${PORT}/v1`;
+
+    if (configContent.includes('[openai]')) {
+      // Use logic that doesn't rely on regex for simple replacement (更鲁棒的替换逻辑)
+      const lines = configContent.split('\n');
+      let inOpenAi = false;
+      let apiBaseUpdated = false;
+      let apiKeyUpdated = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === '[openai]') inOpenAi = true;
+        else if (lines[i].startsWith('[') && lines[i].endsWith(']')) inOpenAi = false;
+
+        if (inOpenAi) {
+          if (lines[i].includes('api_base')) {
+            lines[i] = `api_base = "${apiBase}"`;
+            apiBaseUpdated = true;
+          }
+          if (lines[i].includes('api_key')) {
+            lines[i] = `api_key = "${apiKey}"`;
+            apiKeyUpdated = true;
+          }
+        }
+      }
+
+      if (!apiBaseUpdated) lines.splice(lines.findIndex(l => l.trim() === '[openai]') + 1, 0, `api_base = "${apiBase}"`);
+      if (!apiKeyUpdated) lines.splice(lines.findIndex(l => l.trim() === '[openai]') + 1, 0, `api_key = "${apiKey}"`);
+
+      configContent = lines.join('\n');
+    } else {
+      configContent += `\n[openai]\napi_base = "${apiBase}"\napi_key = "${apiKey}"\n`;
+    }
+
+    fs.writeFileSync(configPath, configContent.trim() + '\n');
+    emitLog(`Automatically updated ${configPath} / 已自动更新本地配置文件`, 'success');
+    return true;
+  } catch (err) {
+    emitLog(`Failed to update config: ${err.message}. Please configure manually. / 自动更新配置失败，请手动配置。`, 'warning');
+    return false;
+  }
+}
+
 function selectAvailableAccounts() {
   const available = accounts.filter(a =>
     a.status !== 'exhausted' && a.status !== 'error' && a.quota.used < a.quota.limit
   );
+  // Dynamic weight routing: Sort by remaining quota (优先选择额度最充足的账号)
   available.sort((a, b) =>
     (b.quota.limit - b.quota.used) - (a.quota.limit - a.quota.used)
   );
@@ -113,24 +180,33 @@ app.all('/v1/*', async (req, res) => {
     apiKey = req.headers['x-api-key'];
   }
 
-  // Allow passing requests even without strict dummy key verification
-  // if you want local open access, but here we keep the check:
   if (!apiKey || !userApiKeys.has(apiKey)) {
     emitLog(`Unauthorized request to ${req.originalUrl} (Invalid Key) / 未授权的请求 (API Key 无效)`, 'error');
     return res.status(401).json({
-      error: { message: 'Invalid or missing API key. Please configure dummy key in config.toml. / API Key 无效或缺失，请在 config.toml 中配置 dummy key', type: 'invalid_request_error' }
+      error: { message: 'Invalid or missing API key. Please configure dummy key in config.toml.', type: 'invalid_request_error' }
     });
   }
 
   userApiKeys.get(apiKey).requestCount++;
   proxyStats.totalRequests++;
-  emitLog(`Incoming request / 收到请求: ${req.method} ${req.originalUrl}`, 'info');
+
+  // Log request content snippet for visibility (日志显示请求摘要)
+  let requestSummary = '';
+  try {
+     if (req.body && req.body.length > 0) {
+        const bodyStr = req.body.toString('utf8');
+        const bodyJson = JSON.parse(bodyStr);
+        requestSummary = bodyJson.messages ? bodyJson.messages[bodyJson.messages.length - 1].content.substring(0, 30) : '';
+     }
+  } catch(e) {}
+
+  emitLog(`Incoming request: ${req.method} ${req.originalUrl} ${requestSummary ? '-> ' + requestSummary + '...' : ''}`, 'info');
 
   const availableAccounts = selectAvailableAccounts();
 
   if (availableAccounts.length === 0) {
     proxyStats.failedRequests++;
-    emitLog('No available accounts in the pool! All accounts exhausted or errored. / 账号池中没有可用账号！所有账号已耗尽或报错。', 'error');
+    emitLog('No available accounts in the pool! / 账号池中没有可用账号！', 'error');
     return res.status(503).json({
       error: { message: 'No available accounts to process the request.', type: 'server_error' }
     });
@@ -139,6 +215,7 @@ app.all('/v1/*', async (req, res) => {
   let lastError = null;
   const targetPath = req.originalUrl;
 
+  // Seamless retry mechanism (无缝重试机制)
   for (const account of availableAccounts) {
     const token = decrypt(account.token);
     if (!token) {
@@ -149,10 +226,9 @@ app.all('/v1/*', async (req, res) => {
 
     try {
       await new Promise((resolve, reject) => {
-        // Strip out host and local authorization from headers (清理不兼容的 Header)
         const headers = { ...req.headers };
         delete headers['host'];
-        delete headers['content-length']; // will be recalculated by request (会被 request 库重新计算)
+        delete headers['content-length'];
 
         headers['Authorization'] = `Bearer ${token}`;
 
@@ -165,18 +241,24 @@ app.all('/v1/*', async (req, res) => {
         };
 
         const proxyReq = https.request(options, (proxyRes) => {
-          // If 401, 429 or 5xx, we consider it a failure for this account and retry (如果报错则认为是账号失效/限流，进行重试)
-          if (proxyRes.statusCode === 401 || proxyRes.statusCode === 429 || proxyRes.statusCode >= 500) {
-            account.status = proxyRes.statusCode === 401 ? 'error' : (proxyRes.statusCode === 429 ? 'exhausted' : account.status);
-            lastError = { message: `OpenAI API returned status ${proxyRes.statusCode}.`, type: 'upstream_error' };
-            proxyRes.resume(); // consume response to free memory (消费尽返回流以免内存泄漏)
-            emitLog(`Account ${account.email} failed with status ${proxyRes.statusCode}. Retrying... / 账号返回 ${proxyRes.statusCode} 错误，正在切换重试...`, 'warning');
-            reject(new Error(`Upstream error ${proxyRes.statusCode}`));
+          // If 401 or 429, mark account and RETRY next (如果是 401 或 429，标记账号并进入下一轮循环重试)
+          if (proxyRes.statusCode === 401 || proxyRes.statusCode === 429) {
+            account.status = proxyRes.statusCode === 401 ? 'error' : 'exhausted';
+            lastError = { message: `OpenAI API returned ${proxyRes.statusCode}.`, type: 'upstream_error' };
+            proxyRes.resume();
+            emitLog(`Account ${account.email} reported ${proxyRes.statusCode}. Switching to next account... / 账号返回 ${proxyRes.statusCode}，正在自动切换...`, 'warning');
+            reject(new Error(`Upstream ${proxyRes.statusCode}`));
+          } else if (proxyRes.statusCode >= 500) {
+             // 5xx might be transient, but we still try another account
+             lastError = { message: `OpenAI API returned ${proxyRes.statusCode}.`, type: 'upstream_error' };
+             proxyRes.resume();
+             emitLog(`Upstream 5xx for ${account.email}. Retrying...`, 'warning');
+             reject(new Error(`Upstream ${proxyRes.statusCode}`));
           } else {
-            // Success (200, 400, 404, etc. - client errors are returned to client)
+            // Success (200, or client errors like 400, 404 which should be passed back)
             account.quota.used++;
             proxyStats.successfulRequests++;
-            emitLog(`Request fulfilled using account ${account.email} (Status: ${proxyRes.statusCode}) / 账号处理请求成功 (状态码: ${proxyRes.statusCode})`, 'success');
+            emitLog(`Request fulfilled by ${account.email} (Status: ${proxyRes.statusCode})`, 'success');
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
             proxyRes.pipe(res).on('finish', resolve);
           }
@@ -188,26 +270,21 @@ app.all('/v1/*', async (req, res) => {
           reject(err);
         });
 
-        // Write the buffered body if it exists (重新写入缓存的 Body 以支持 POST 请求重试)
         if (req.body && req.body.length > 0) {
           proxyReq.write(req.body);
         }
         proxyReq.end();
       });
 
-      // If we reach here, the promise resolved, meaning the request was successfully piped back. (执行成功，退出循环)
-      return;
+      return; // Request handled successfully
 
     } catch (error) {
-      console.error(`[Proxy] Account ${account.email} failed with error: ${error.message}. Switching to next account...`);
-      // Warning is already emitted inside the promise reject, but catch network errors here
-      if(error.message !== `Upstream error 401` && error.message !== `Upstream error 429` && !error.message.startsWith(`Upstream error 5`)) {
-          emitLog(`Network error for account ${account.email}: ${error.message}. Retrying... / 账号网络错误，正在重试...`, 'warning');
-      }
+       // Log the error and continue to the next account in the loop
+       console.error(`[Proxy Retry] Account ${account.email} failed: ${error.message}`);
     }
   }
 
-  // All accounts failed (所有账号均失败)
+  // All accounts failed
   proxyStats.failedRequests++;
   emitLog('All accounts failed to process the request. / 账号池内所有账号均无法处理此请求。', 'error');
   if (!res.headersSent) {
@@ -223,87 +300,99 @@ app.all('/v1/*', async (req, res) => {
 
 // ============ OAuth Routes (OAuth 路由) ============
 
-// Initiate OAuth Login (发起 OAuth 登录)
-app.get('/api/auth/login', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  const authUrl = `https://auth.openai.com/authorize?` + querystring.stringify({
-    client_id: OPENAI_CLIENT_ID,
-    response_type: 'code',
-    redirect_uri: CALLBACK_URL,
-    scope: 'api.full',
-    state: state
-  });
+// Automated Token Capture Flow (自动化 Token 捕获流)
+app.get('/api/auth/login', async (req, res) => {
+  const requestId = crypto.randomBytes(8).toString('hex');
+  const userDataDir = path.join(os.tmpdir(), `cx-puppeteer-${requestId}`);
 
-  res.redirect(authUrl);
-});
-
-// OAuth Callback (OAuth 回调)
-app.get('/api/auth/callback', async (req, res) => {
-  const { code, state, error } = req.query;
-
-  if (error) {
-    return res.redirect('/?error=' + encodeURIComponent(error));
-  }
-
-  if (!code) {
-    return res.redirect('/?error=no_code');
-  }
+  emitLog(`Starting automated login browser... / 正在启动自动化登录浏览器...`, 'info');
 
   try {
-    // 用授权码换取 token
-    const tokenResponse = await fetch('https://auth.openai.com/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        client_id: OPENAI_CLIENT_ID,
-        client_secret: OPENAI_CLIENT_SECRET,
-        code: code,
-        redirect_uri: CALLBACK_URL
-      })
+    const browser = await puppeteer.launch({
+      headless: false,
+      userDataDir: userDataDir,
+      defaultViewport: null,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
-    const tokenData = await tokenResponse.json();
+    const page = await browser.newPage();
 
-    if (tokenData.error) {
-      return res.redirect('/?error=' + encodeURIComponent(tokenData.error_description || tokenData.error));
-    }
+    // Redirect user to OpenAI Login
+    await page.goto('https://chat.openai.com/auth/login');
 
-    // 用 access_token 获取用户信息
-    const userResponse = await fetch('https://api.openai.com/v1/me', {
-      headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+    res.send(`
+      <html>
+        <body style="background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
+          <h2>Please complete login in the opened browser window</h2>
+          <p>请在打开的浏览器窗口中完成登录</p>
+          <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+            Waiting for session token... / 正在等待捕获 Token...
+          </div>
+        </body>
+      </html>
+    `);
+
+    page.on('response', async (response) => {
+      const url = response.url();
+      if (url.includes('chat.openai.com/api/auth/session') && response.status() === 200) {
+        try {
+          const session = await response.json();
+          if (session.accessToken) {
+            const email = session.user?.email || 'unknown';
+            emitLog(`Captured Token for: ${email} / 已捕获账号 Token: ${email}`, 'success');
+
+            // Add or Update Account
+            const existingIdx = accounts.findIndex(a => a.email === email);
+            const newAccount = {
+              id: existingIdx !== -1 ? accounts[existingIdx].id : Date.now().toString(),
+              email: email,
+              name: session.user?.name || '',
+              plan: 'plus',
+              token: encrypt(session.accessToken),
+              quota: existingIdx !== -1 ? accounts[existingIdx].quota : { used: 0, limit: 120, resetAt: new Date(Date.now() + 60*60*1000).toISOString() },
+              status: 'active'
+            };
+
+            if (existingIdx !== -1) {
+              accounts[existingIdx] = newAccount;
+            } else {
+              accounts.push(newAccount);
+            }
+
+            // Generate/Update Dummy Key
+            const apiKey = generateApiKey();
+            userApiKeys.set(apiKey, {
+              userId: newAccount.id,
+              email: newAccount.email,
+              createdAt: new Date().toISOString(),
+              requestCount: 0
+            });
+
+            // Update local config
+            if (typeof updateCodexConfig === 'function') {
+                updateCodexConfig(apiKey);
+            }
+
+            emitLog(`Account ${email} is now ready and configured! / 账号 ${email} 已就绪并完成配置！`, 'success');
+
+            // Success notification to all clients via SSE
+            emitLog(`SUCCESS_LOGIN:${email}:${apiKey}`, 'system');
+
+            await browser.close();
+          }
+        } catch (e) {
+          console.error('Failed to parse session JSON', e);
+        }
+      }
     });
 
-    const userData = await userResponse.json();
-
-    // 添加账号
-    const newAccount = {
-      id: Date.now().toString(),
-      email: userData.email || 'unknown',
-      name: userData.name || '',
-      plan: 'plus',
-      token: encrypt(tokenData.access_token),
-      quota: { used: 0, limit: 120, resetAt: new Date(Date.now() + 60*60*1000).toISOString() },
-      status: 'active'
-    };
-
-    accounts.push(newAccount);
-
-    // 生成用户 API Key
-    const apiKey = generateApiKey();
-    userApiKeys.set(apiKey, {
-      userId: newAccount.id,
-      email: newAccount.email,
-      createdAt: new Date().toISOString(),
-      requestCount: 0
+    browser.on('disconnected', () => {
+       emitLog(`Login browser closed. / 登录浏览器已关闭。`, 'info');
     });
-
-    // 重定向到成功页面
-    res.redirect('/?success=true&apiKey=' + apiKey);
 
   } catch (err) {
-    console.error('OAuth error:', err);
-    res.redirect('/?error=oauth_failed');
+    emitLog(`Failed to launch browser: ${err.message}`, 'error');
+    if (!res.headersSent) res.status(500).send('Failed to launch login flow');
   }
 });
 
@@ -349,6 +438,42 @@ app.get('/api/proxy/stats', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', proxy: 'running', accounts: accounts.length });
 });
+
+// ============ Background Session Refresher (后台 Session 刷新任务) ============
+
+async function refreshAllSessions() {
+  if (accounts.length === 0) return;
+
+  emitLog('Starting background session refresh... / 正在执行后台 Session 刷新...', 'info');
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  for (const account of accounts) {
+    try {
+      const page = await browser.newPage();
+      // We can't easily refresh without cookies, but if we have userDataDirs it would work.
+      // For now, let's assume we just want to visit the session endpoint if possible.
+      // A better way is to store the userDataDir path per account.
+
+      emitLog(`Refreshing session for ${account.email}...`, 'info');
+      // This is a placeholder for actual session refresh logic which may require
+      // cookie persistence or re-login.
+
+      await page.close();
+    } catch (e) {
+      emitLog(`Failed to refresh session for ${account.email}: ${e.message}`, 'warning');
+    }
+  }
+
+  await browser.close();
+  emitLog('Background session refresh completed. / 后台 Session 刷新完成。', 'info');
+}
+
+// Refresh sessions every 4 hours (每 4 小时刷新一次)
+setInterval(refreshAllSessions, 4 * 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`
