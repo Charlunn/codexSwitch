@@ -3,227 +3,306 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>cx - Codex 账户管理器</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>cx - Codex Account Load Balancer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4f46e5',
+                        secondary: '#6366f1',
+                        dark: '#0f172a',
+                        card: '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            background: #f5f5f5;
-            color: #333;
-            min-height: 100vh;
+        body { background-color: #0f172a; color: #f8fafc; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+
+        .log-container {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            height: 300px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
         }
-        .container { max-width: 900px; margin: 0 auto; padding: 32px; }
-        .header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 32px;
+
+        .log-container::-webkit-scrollbar { width: 8px; }
+        .log-container::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+        .log-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        .log-container::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+        .log-line { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); word-wrap: break-word;}
+        .log-info { color: #38bdf8; }
+        .log-success { color: #4ade80; }
+        .log-warning { color: #fbbf24; }
+        .log-error { color: #f87171; }
+        .log-timestamp { color: #64748b; margin-right: 8px; user-select: none; }
+
+        .pulse-dot {
+            height: 10px; width: 10px; border-radius: 50%; display: inline-block;
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+            animation: pulse 2s infinite;
         }
-        .logo { display: flex; align-items: center; gap: 12px; }
-        .logo-icon {
-            width: 48px; height: 48px;
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 700; font-size: 18px;
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
         }
-        .logo-text {
-            font-size: 24px; font-weight: 700;
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        .card {
-            background: white; border-radius: 16px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-            padding: 24px; margin-bottom: 20px;
-        }
-        .card h2 { margin-bottom: 16px; font-size: 16px; color: #666; }
-        .card h1 { font-size: 20px; margin-bottom: 8px; }
-        .card p { color: #888; font-size: 14px; }
-        .account-list { display: flex; flex-direction: column; gap: 12px; }
-        .account-item {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 20px; background: #fafafa;
-            border-radius: 12px; border: 1px solid #eee;
-            transition: all 0.2s;
-        }
-        .account-item:hover { border-color: #6366f1; transform: translateX(4px); }
-        .account-item.active { border-color: #6366f1; background: #f0f0ff; }
-        .account-info { display: flex; align-items: center; gap: 16px; }
-        .account-avatar {
-            width: 44px; height: 44px; border-radius: 10px;
-            background: linear-gradient(135deg, #e0e0ff, #f0f0f0);
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 600; color: #6366f1; font-size: 16px;
-        }
-        .account-details h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-        .account-details p { font-size: 13px; color: #999; }
-        .badge {
-            padding: 4px 10px; border-radius: 20px;
-            font-size: 12px; font-weight: 500;
-        }
-        .badge-plus { background: #e0e0ff; color: #6366f1; }
-        .badge-team { background: #fef3c7; color: #d97706; }
-        .badge-active { background: #d1fae5; color: #059669; }
-        .btn {
-            padding: 8px 16px; border-radius: 8px;
-            font-weight: 500; font-size: 14px;
-            cursor: pointer; border: none; transition: all 0.2s;
-        }
-        .btn-primary { background: #6366f1; color: white; }
-        .btn-primary:hover { background: #4f46e5; }
-        .btn-danger { background: #fee2e2; color: #dc2626; }
-        .btn-danger:hover { background: #fecaca; }
-        .btn-secondary { background: #f5f5f5; color: #666; }
-        .btn-secondary:hover { background: #eee; }
-        .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s;
-        }
-        .modal-overlay.active { opacity: 1; visibility: visible; }
-        .modal {
-            background: white; border-radius: 16px;
-            padding: 32px; width: 100%; max-width: 400px;
-            transform: scale(0.95); transition: all 0.2s;
-        }
-        .modal-overlay.active .modal { transform: scale(1); }
-        .modal h2 { margin-bottom: 24px; font-size: 18px; }
-        .form-group { margin-bottom: 16px; }
-        .form-label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #666; }
-        .form-input {
-            width: 100%; padding: 12px 14px;
-            border: 1px solid #ddd; border-radius: 8px;
-            font-size: 14px; transition: all 0.2s;
-        }
-        .form-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
-        .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
-        .toast {
-            position: fixed; bottom: 24px; right: 24px;
-            padding: 14px 20px; background: white;
-            border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            transform: translateY(100px); opacity: 0;
-            transition: all 0.3s; z-index: 2000;
-        }
-        .toast.show { transform: translateY(0); opacity: 1; }
-        .toast.success { border-left: 4px solid #10b981; }
-        .toast.error { border-left: 4px solid #ef4444; }
-        .empty-state { text-align: center; padding: 48px 24px; color: #999; }
-        .proxy-status {
-            display: flex; align-items: center; gap: 16px;
-            padding: 16px; background: #f0fdf4; border-radius: 12px;
-            margin-bottom: 20px;
-        }
-        .proxy-status .dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: #10b981;
-        }
-        .proxy-status .dot.error { background: #ef4444; }
-        .proxy-status .text { font-size: 14px; color: #666; }
-        .proxy-status .port { font-weight: 600; color: #333; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-        .stat-item { background: white; padding: 16px; border-radius: 12px; text-align: center; }
-        .stat-item .value { font-size: 24px; font-weight: 700; color: #6366f1; }
-        .stat-item .label { font-size: 12px; color: #999; margin-top: 4px; }
-        .quota-bar { width: 100%; height: 6px; background: #eee; border-radius: 3px; margin-top: 8px; }
-        .quota-bar .fill { height: 100%; background: #6366f1; border-radius: 3px; transition: width 0.3s; }
+
+        .quota-bar { transition: width 0.5s ease-in-out; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <header class="header">
-            <div class="logo">
-                <div class="logo-icon">cx</div>
-                <span class="logo-text">cx</span>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center glass-panel p-6 rounded-2xl shadow-lg">
+            <div class="flex items-center gap-4 mb-4 md:mb-0">
+                <div class="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-inner">
+                    cx
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400" data-i18n="appTitle">Codex Load Balancer</h1>
+                    <div class="flex items-center gap-2 text-sm text-gray-400 mt-1">
+                        <span class="pulse-dot bg-green-400"></span>
+                        <span><span data-i18n="gatewayActive">API Gateway Active at</span> <code class="bg-gray-800 px-2 py-0.5 rounded text-green-300">http://127.0.0.1:1337/v1</code></span>
+                    </div>
+                </div>
             </div>
-            <button class="btn btn-primary" onclick="loginWithOAuth()">+ 添加账户</button>
+
+            <div class="flex items-center gap-3">
+                <button onclick="toggleLanguage()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border border-gray-700 flex items-center gap-2" title="Toggle Language">
+                    <i class="fas fa-globe"></i> <span id="langLabel">中/En</span>
+                </button>
+                <button onclick="window.location.href='/api/auth/login'" class="bg-primary hover:bg-secondary text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-primary/30 flex items-center gap-2">
+                    <i class="fab fa-openid"></i> <span data-i18n="loginBtn">Login with OpenAI</span>
+                </button>
+            </div>
         </header>
 
-        <div class="proxy-status">
-            <div class="dot"></div>
-            <div class="text">
-                代理运行中 | 监听 <span class="port">127.0.0.1:1338</span>
-            </div>
-        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        <div class="stats-grid" id="statsGrid">
-            <div class="stat-item">
-                <div class="value" id="totalRequests">0</div>
-                <div class="label">总请求</div>
-            </div>
-            <div class="stat-item">
-                <div class="value" id="activeAccounts">2</div>
-                <div class="label">活跃账户</div>
-            </div>
-            <div class="stat-item">
-                <div class="value" id="successRate">100%</div>
-                <div class="label">成功率</div>
-            </div>
-            <div class="stat-item">
-                <div class="value" id="balanceStrategy">配额</div>
-                <div class="label">负载策略</div>
-            </div>
-        </div>
+            <!-- Left Column: Accounts & Config -->
+            <div class="lg:col-span-2 space-y-6">
 
-        <div class="card">
-            <h2>已登录账户</h2>
-            <div class="account-list" id="accountList">
-                <div class="empty-state">加载中...</div>
-            </div>
-        </div>
+                <!-- Accounts Card -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold flex items-center gap-2"><i class="fas fa-users text-primary"></i> <span data-i18n="accountPool">Account Pool</span></h2>
+                        <span class="text-sm bg-gray-800 text-gray-300 px-3 py-1 rounded-full" id="accountCountBadge">0 Total</span>
+                    </div>
 
-        <div class="card">
-            <h2>使用指南</h2>
-            <div style="font-size: 14px; color: #666; line-height: 1.8;">
-                <p style="margin-bottom: 12px;"><strong>1. 设置系统代理</strong></p>
-                <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; font-family: monospace; margin-bottom: 16px;">
-                    Windows: 设置 → 网络 → 代理 → 127.0.0.1:1338<br>
-                    或环境变量: HTTP_PROXY=http://127.0.0.1:1338
+                    <div id="accountList" class="space-y-4">
+                        <div class="text-center py-8 text-gray-500">
+                            <i class="fas fa-circle-notch fa-spin text-3xl mb-3"></i>
+                            <p data-i18n="loadingAccounts">Loading accounts...</p>
+                        </div>
+                    </div>
                 </div>
-                <p style="margin-bottom: 12px;"><strong>2. Codex CLI/IDE</strong></p>
-                <div style="background: #f5f5f5; padding: 12px; border-radius: 8px; font-family: monospace;">
-                    无需任何配置！所有请求自动经过 cx 代理负载均衡
+
+                <!-- Setup Guide -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fas fa-cog text-primary"></i> <span data-i18n="configTitle">Codex Configuration</span></h2>
+                    <p class="text-gray-400 text-sm mb-4" data-i18n="configDesc">Edit your <code class="text-gray-300">~/.codex/config.toml</code> or <code class="text-gray-300">.codex/config.toml</code> file to use this local gateway.</p>
+
+                    <div class="bg-gray-900 rounded-xl p-4 border border-gray-700 font-mono text-sm relative group">
+                        <pre class="text-gray-300"><code>[openai]
+api_base = "http://127.0.0.1:1337/v1"
+api_key = "<span class="text-green-400" id="dummyKeyDisplay">cx_dummy_test_key_123</span>"</code></pre>
+                        <button onclick="copyConfig()" class="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors">
+                            <i class="far fa-copy"></i>
+                        </button>
+                    </div>
                 </div>
+
+            </div>
+
+            <!-- Right Column: Stats & Console -->
+            <div class="space-y-6">
+
+                <!-- Monitor Stats -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-primary"></i> <span data-i18n="trafficMonitor">Traffic Monitor</span></h2>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statTotal">Total Requests</div>
+                            <div class="text-2xl font-bold text-white" id="statTotal">0</div>
+                        </div>
+                        <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statSuccess">Successful</div>
+                            <div class="text-2xl font-bold text-green-400" id="statSuccess">0</div>
+                        </div>
+                        <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statFailed">Failed / Retried</div>
+                            <div class="text-2xl font-bold text-red-400" id="statFailed">0</div>
+                        </div>
+                        <div class="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                            <div class="text-gray-400 text-xs uppercase tracking-wider mb-1" data-i18n="statRate">Success Rate</div>
+                            <div class="text-2xl font-bold text-blue-400" id="statRate">100%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Console Logs -->
+                <div class="glass-panel rounded-2xl overflow-hidden flex flex-col h-[400px]">
+                    <div class="bg-gray-800/80 p-3 border-b border-gray-700 flex justify-between items-center">
+                        <h2 class="text-sm font-semibold flex items-center gap-2"><i class="fas fa-terminal text-primary"></i> <span data-i18n="consoleTitle">Gateway Console</span></h2>
+                        <button onclick="clearLogs()" class="text-xs text-gray-400 hover:text-white"><i class="fas fa-trash"></i> <span data-i18n="clearLogsBtn">Clear</span></button>
+                    </div>
+                    <div class="p-4 bg-black/40 flex-1 log-container" id="consoleLogs">
+                        <div class="log-line log-info"><span class="log-timestamp">[System]</span> <span id="initLogMsg">Initializing console...</span></div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 
-    <div class="modal-overlay" id="modal">
-        <div class="modal">
-            <h2>添加 OpenAI 账户</h2>
-            <form onsubmit="handleAdd(event)">
-                <div class="form-group">
-                    <label class="form-label">OpenAI 邮箱</label>
-                    <input type="email" class="form-input" id="email" placeholder="email@email.com" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">密码</label>
-                    <input type="password" class="form-input" id="password" placeholder="••••••••" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">API Key (可选)</label>
-                    <input type="text" class="form-input" id="apiKey" placeholder="sk-...">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">添加</button>
-                </div>
-            </form>
-        </div>
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-xl border-l-4 border-green-500 transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
+        <i class="fas fa-check-circle text-green-500"></i>
+        <span id="toastMsg">Notification message</span>
     </div>
-
-    <div class="toast" id="toast"></div>
 
     <script>
+        // --- Translations (i18n) ---
+        const translations = {
+            en: {
+                appTitle: "Codex Load Balancer",
+                gatewayActive: "API Gateway Active at",
+                loginBtn: "Login with OpenAI",
+                accountPool: "Account Pool",
+                loadingAccounts: "Loading accounts...",
+                noAccounts: "No Accounts Connected",
+                noAccountsDesc: "Login with OpenAI to add your first account to the pool.",
+                addAccountBtn: "Add Account",
+                configTitle: "Codex Configuration",
+                configDesc: "Edit your <code>~/.codex/config.toml</code> or <code>.codex/config.toml</code> file to use this local gateway.",
+                trafficMonitor: "Traffic Monitor",
+                statTotal: "Total Requests",
+                statSuccess: "Successful",
+                statFailed: "Failed / Retried",
+                statRate: "Success Rate",
+                consoleTitle: "Gateway Console",
+                clearLogsBtn: "Clear",
+                initConsole: "Initializing console...",
+                configCopied: "Configuration copied to clipboard!",
+                apiQuotaUsage: "API Quota Usage",
+                reqs: "reqs",
+                healthy: "Healthy",
+                rateLimited: "Rate Limited",
+                error: "Error",
+                confirmRemove: "Remove this account from the pool?",
+                accountRemoved: "Account removed",
+                failedRemove: "Failed to remove",
+                consoleCleared: "Console cleared.",
+                connectedSSE: "Connected to Gateway SSE stream",
+                loginFailed: "Login Failed:",
+                accountLinked: "OpenAI account linked successfully!",
+                activeLabel: "Active"
+            },
+            zh: {
+                appTitle: "Codex 负载均衡器",
+                gatewayActive: "API 代理运行于",
+                loginBtn: "使用 OpenAI 登录",
+                accountPool: "API 账号池",
+                loadingAccounts: "正在加载账号...",
+                noAccounts: "暂无连接的账号",
+                noAccountsDesc: "请使用 OpenAI 登录，以将您的第一个账号添加到账号池中。",
+                addAccountBtn: "添加账号",
+                configTitle: "Codex 客户端配置",
+                configDesc: "请修改 <code>~/.codex/config.toml</code> 或当前项目的 <code>.codex/config.toml</code> 来使用此本地代理。",
+                trafficMonitor: "流量监控",
+                statTotal: "总请求数",
+                statSuccess: "请求成功",
+                statFailed: "失败 / 触发重试",
+                statRate: "请求成功率",
+                consoleTitle: "代理控制台 (实时日志)",
+                clearLogsBtn: "清空",
+                initConsole: "控制台初始化中...",
+                configCopied: "配置已复制到剪贴板！",
+                apiQuotaUsage: "API 额度使用情况",
+                reqs: "次",
+                healthy: "健康",
+                rateLimited: "被限流",
+                error: "报错",
+                confirmRemove: "确定要从账号池中移除此账号吗？",
+                accountRemoved: "账号已移除",
+                failedRemove: "移除失败",
+                consoleCleared: "控制台已清空。",
+                connectedSSE: "已连接到网关实时日志流",
+                loginFailed: "登录失败：",
+                accountLinked: "OpenAI 账号授权成功！",
+                activeLabel: "个活跃"
+            }
+        };
+
+        let currentLang = localStorage.getItem('cx_lang') || 'en';
+
+        function t(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'zh' : 'en';
+            localStorage.setItem('cx_lang', currentLang);
+            updateUIStrings();
+            loadAccounts(); // Re-render dynamic account list
+        }
+
+        function updateUIStrings() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) {
+                    el.innerHTML = translations[currentLang][key];
+                }
+            });
+            document.getElementById('initLogMsg').textContent = t('initConsole');
+        }
+
         const API = '/api';
 
+        // Initialize i18n
+        updateUIStrings();
+
+        // --- Notifications ---
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = message;
+
+            toast.className = `fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-xl border-l-4 ${type === 'success' ? 'border-green-500' : 'border-red-500'} transform transition-all duration-300 z-50 flex items-center gap-3`;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function copyConfig() {
+            const code = `[openai]\napi_base = "http://127.0.0.1:1337/v1"\napi_key = "${document.getElementById('dummyKeyDisplay').innerText}"`;
+            navigator.clipboard.writeText(code).then(() => {
+                showToast(t('configCopied'));
+            });
+        }
+
+        // --- Data Fetching ---
         async function loadAccounts() {
             try {
                 const res = await fetch(`${API}/accounts`);
                 const accounts = await res.json();
                 renderAccounts(accounts);
             } catch (err) {
-                showToast('加载账户失败', 'error');
+                addLog('Failed to fetch accounts', 'error');
             }
         }
 
@@ -231,120 +310,151 @@
             try {
                 const res = await fetch(`${API}/proxy/stats`);
                 const stats = await res.json();
-                document.getElementById('totalRequests').textContent = stats.totalRequests || 0;
-                document.getElementById('activeAccounts').textContent = (stats.accounts || []).filter(a => a.status === 'active').length;
+
+                document.getElementById('statTotal').textContent = stats.totalRequests || 0;
+                document.getElementById('statSuccess').textContent = stats.successfulRequests || 0;
+                document.getElementById('statFailed').textContent = stats.failedRequests || 0;
+
                 if (stats.totalRequests > 0) {
                     const rate = Math.round((stats.successfulRequests / stats.totalRequests) * 100);
-                    document.getElementById('successRate').textContent = rate + '%';
+                    document.getElementById('statRate').textContent = `${rate}%`;
                 }
             } catch (err) {}
         }
 
+        // --- Rendering ---
         function renderAccounts(accounts) {
             const list = document.getElementById('accountList');
+            document.getElementById('accountCountBadge').textContent = `${accounts.length} ${t('activeLabel')}`;
+
             if (!accounts || accounts.length === 0) {
-                list.innerHTML = '<div class="empty-state">暂无账户，请添加 OpenAI 账户</div>';
+                list.innerHTML = `
+                    <div class="text-center py-12 border-2 border-dashed border-gray-700 rounded-xl">
+                        <i class="fas fa-user-slash text-4xl text-gray-600 mb-4"></i>
+                        <h3 class="text-lg font-medium text-gray-300 mb-1">${t('noAccounts')}</h3>
+                        <p class="text-gray-500 text-sm mb-4">${t('noAccountsDesc')}</p>
+                        <button onclick="window.location.href='/api/auth/login'" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition-colors border border-gray-700">${t('addAccountBtn')}</button>
+                    </div>`;
                 return;
             }
-            list.innerHTML = accounts.map((a, i) => `
-                <div class="account-item ${a.isActive ? 'active' : ''}" style="animation-delay: ${i * 0.05}s">
-                    <div class="account-info">
-                        <div class="account-avatar">${a.email[0].toUpperCase()}</div>
-                        <div class="account-details">
-                            <h3>${a.email}</h3>
-                            <p>配额: ${a.quota.used}/${a.quota.limit}</p>
+
+            list.innerHTML = accounts.map((a) => {
+                const usagePercent = Math.min(100, (a.quota.used / a.quota.limit) * 100);
+                const statusColor = a.status === 'active' ? 'bg-green-500' : (a.status === 'exhausted' ? 'bg-yellow-500' : 'bg-red-500');
+                const statusText = a.status === 'active' ? t('healthy') : (a.status === 'exhausted' ? t('rateLimited') : t('error'));
+
+                return `
+                <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-5 hover:border-gray-600 transition-colors">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center font-bold text-gray-300 border border-gray-600">
+                                ${a.email[0].toUpperCase()}
+                            </div>
+                            <div>
+                                <h3 class="font-medium text-gray-200">${a.email}</h3>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="flex items-center gap-1.5 text-xs text-gray-400 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">
+                                        <span class="w-1.5 h-1.5 rounded-full ${statusColor}"></span>
+                                        ${statusText}
+                                    </span>
+                                    <span class="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800 uppercase">${a.plan}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="deleteAccount('${a.id}')" class="text-gray-500 hover:text-red-400 transition-colors" title="Remove">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-400 mb-1.5">
+                            <span>${t('apiQuotaUsage')}</span>
+                            <span>${a.quota.used} / ${a.quota.limit} ${t('reqs')}</span>
+                        </div>
+                        <div class="w-full bg-gray-900 rounded-full h-2 border border-gray-800 overflow-hidden">
+                            <div class="bg-gradient-to-r from-primary to-secondary h-2 rounded-full quota-bar" style="width: ${usagePercent}%"></div>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span class="badge badge-${a.plan}">${a.plan === 'plus' ? 'Plus' : 'Team'}</span>
-                        ${a.isActive ? '<span class="badge badge-active">使用中</span>' : ''}
-                        ${!a.isActive ? `<button class="btn btn-secondary" onclick="switchAccount('${a.id}')">切换</button>` : ''}
-                        <button class="btn btn-danger" onclick="deleteAccount('${a.id}')" style="padding: 6px 10px; font-size: 12px;">删除</button>
-                    </div>
                 </div>
-                <div class="quota-bar" style="margin-top: -8px; margin-bottom: 12px;">
-                    <div class="fill" style="width: ${(a.quota.used / a.quota.limit) * 100}%"></div>
-                </div>
-            `).join('');
-        }
-
-        async function switchAccount(id) {
-            try {
-                const res = await fetch(`${API}/accounts/${id}/switch`, { method: 'PUT' });
-                if (res.ok) {
-                    showToast('切换成功', 'success');
-                    loadAccounts();
-                }
-            } catch (err) {
-                showToast('切换失败', 'error');
-            }
+            `}).join('');
         }
 
         async function deleteAccount(id) {
-            if (!confirm('确定删除此账户？')) return;
+            if (!confirm(t('confirmRemove'))) return;
             try {
                 const res = await fetch(`${API}/accounts/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    showToast('已删除', 'success');
+                    showToast(t('accountRemoved'), 'success');
                     loadAccounts();
+                    addLog(`Account removed manually`, 'warning');
                 }
             } catch (err) {
-                showToast('删除失败', 'error');
+                showToast(t('failedRemove'), 'error');
             }
         }
 
-        function handleAdd(e) {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const apiKey = document.getElementById('apiKey').value;
+        // --- Console Logic ---
+        const logContainer = document.getElementById('consoleLogs');
 
-            // 模拟添加
-            showToast('账户添加成功', 'success');
-            closeModal();
-            loadAccounts();
+        function addLog(msg, level = 'info') {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: "numeric", minute: "numeric", second: "numeric" });
+            const div = document.createElement('div');
+            div.className = `log-line log-${level}`;
+            div.innerHTML = `<span class="log-timestamp">[${time}]</span> ${msg}`;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
         }
 
-        function loginWithOAuth() {
-            window.location.href = '/api/auth/login';
+        function clearLogs() {
+            logContainer.innerHTML = '';
+            addLog(t('consoleCleared'), 'info');
         }
 
-        function openAddModal() {
-            document.getElementById('modal').classList.add('active');
-            document.getElementById('email').focus();
+        // Connect to SSE for real-time logs
+        function connectSSE() {
+            const eventSource = new EventSource('/api/logs/stream');
+
+            eventSource.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    addLog(data.message, data.level);
+                    // Force refresh stats on important events
+                    if (data.level !== 'info') {
+                        loadStats();
+                        loadAccounts();
+                    }
+                } catch(err) {}
+            };
+
+            eventSource.onopen = () => addLog(t('connectedSSE'), 'success');
+            eventSource.onerror = () => {
+                eventSource.close();
+                setTimeout(connectSSE, 5000); // Reconnect logic
+            };
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.remove('active');
-            document.getElementById('email').value = '';
-            document.getElementById('password').value = '';
-            document.getElementById('apiKey').value = '';
-        }
-
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast show ${type}`;
-            setTimeout(() => toast.classList.remove('show'), 3000);
-        }
-
-        document.getElementById('modal').addEventListener('click', (e) => {
-            if (e.target.id === 'modal') closeModal();
-        });
-
+        // --- Initialization ---
         loadAccounts();
         loadStats();
-        setInterval(loadStats, 3000);
+        setInterval(loadStats, 2000);
+        setInterval(loadAccounts, 5000); // periodic refresh for quota
+        connectSSE();
 
-        // 处理 OAuth 回调参数
+        // Handle OAuth Callback
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('error')) {
-            showToast('登录失败: ' + decodeURIComponent(urlParams.get('error')), 'error');
+            showToast(t('loginFailed') + ' ' + decodeURIComponent(urlParams.get('error')), 'error');
             history.replaceState({}, '', window.location.pathname);
         }
         if (urlParams.get('success')) {
             const apiKey = urlParams.get('apiKey');
-            showToast('登录成功！您的 API Key: ' + apiKey, 'success');
+            if(apiKey) {
+                document.getElementById('dummyKeyDisplay').innerText = apiKey;
+            }
+            showToast(t('accountLinked'), 'success');
             history.replaceState({}, '', window.location.pathname);
+            addLog('New OpenAI account successfully authorized and added to pool', 'success');
+            loadAccounts();
         }
     </script>
 </body>
