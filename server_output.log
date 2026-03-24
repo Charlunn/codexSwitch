@@ -1,0 +1,28 @@
+
+╔══════════════════════════════════════════════════════╗
+║           cx Proxy Server v1.0.0                ║
+╚══════════════════════════════════════════════════════╝
+
+🌐 WebUI:     http://localhost:1337
+🔌 API Base:  http://localhost:1337/v1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  HOW TO USE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Open http://localhost:1337
+2. Click "Login with OpenAI" to OAuth login
+3. Configure Codex config.toml (~/.codex/config.toml or .codex/config.toml):
+
+   [openai]
+   api_base = "http://127.0.0.1:1337/v1"
+   api_key = "your_generated_dummy_key"
+
+4. Codex requests will be load-balanced automatically!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Note: Set OPENAI_CLIENT_ID and OPENAI_CLIENT_SECRET
+      environment variables for OAuth to work.
+
+Press Ctrl+C to stop
